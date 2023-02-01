@@ -66,19 +66,31 @@ def decode_raw_flight_history(filename, location='', split=-1):
     #convert wind to u,v
     wind_u, wind_v = calc.wind_components(wspd, wdir)
 
+    #calculate seconds from launch
+    launch_dt = datetime.strptime(raw_dict["UTC time"][0], '%H:%M:%S')
+    profile_seconds = np.zeros_like(wind_u)
+    for i, time_str in enumerate(raw_dict["UTC time"]):
+        tmp_dt = datetime.strptime(time_str, '%H:%M:%S')
+        profile_seconds[i] = (tmp_dt-launch_dt).total_seconds()
+
+
     with_balloon_profile = {'pres':pres[:split], 'hght':hght[:split],
                             'tmpc':tmpc[:split], 'dwpc':dwpc[:split],
                             'wdir':wdir[:split], 'wspd':wspd[:split],
                             'rise':rise[:split],
-                            'wind_u':wind_u[:split], 'wind_v':wind_v[:split]}
+                            'wind_u':wind_u[:split], 'wind_v':wind_v[:split],
+                            'time':profile_seconds[:split],
+                            'lat':raw_dict["Latitude"][:split], 'lon':raw_dict["Longitude"][:split]}
 
     no_balloon_profile = {'pres':pres[split:], 'hght':hght[split:],
                             'tmpc':tmpc[split:], 'dwpc':dwpc[split:],
                             'wdir':wdir[split:], 'wspd':wspd[split:],
                             'rise':rise[split:],
-                            'wind_u':wind_u[split:], 'wind_v':wind_v[split:]}
+                            'wind_u':wind_u[split:], 'wind_v':wind_v[split:],
+                            'time':profile_seconds[split:],
+                            'lat':raw_dict["Latitude"][split:], 'lon':raw_dict["Longitude"][split:]}
 
-    return with_balloon_profile, no_balloon_profile, {'time':raw_dict["UTC time"][0], 'lat':raw_dict["Latitude"][0], 'lon':raw_dict["Longitude"][0]}
+    return with_balloon_profile, no_balloon_profile, {'time':launch_dt, 'lat':raw_dict["Latitude"][0], 'lon':raw_dict["Longitude"][0]}
 
 
 
