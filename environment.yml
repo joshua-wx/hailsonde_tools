@@ -1,0 +1,13 @@
+name: metpy
+channels:
+ - conda-forge
+dependencies:
+ - pandas
+ - numpy
+ - scipy
+ - xarray
+ - matplotlib
+ - tqdm
+ - metpy
+ - nb_conda
+ - jupyterlab
