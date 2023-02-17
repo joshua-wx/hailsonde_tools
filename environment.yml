@@ -1,4 +1,4 @@
-name: metpy
+name: hailsonde
 channels:
  - conda-forge
 dependencies:
