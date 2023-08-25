@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 import zipfile
+import os
+from glob import glob
 
 import numpy as np
 import xarray as xr
@@ -104,6 +106,8 @@ def get_accessg_profile(dt, request_lat, request_lon):
     #extract date components
     model_timestep_hr = 6
     run_hour_str = str(round(dt.hour/model_timestep_hr)*model_timestep_hr).zfill(2) + '00'
+    if run_hour_str == '2400':
+        run_hour_str = '0000'
 
     #build path
     accessg_folder = '/'.join([accessg_root, datetime.strftime(dt, '%Y%m%d'), run_hour_str, 'an'])
@@ -141,7 +145,7 @@ def get_accessg_profile(dt, request_lat, request_lon):
             'wind_u':uwnd_profile * units.meter/units.second, 'wind_v':vwnd_profile * units.meter/units.second}
 
 
-def load_radar_data(radar_id, start_dt, end_dt):
+def load_level1_radar_data(radar_id, start_dt, end_dt, vol_time=300):
 
     level_1_path = '/g/data/rq0/level_1/odim_pvol'
 
@@ -167,11 +171,27 @@ def load_radar_data(radar_id, start_dt, end_dt):
                 #if dt is in target period
                 if vol_dt >= start_dt and vol_dt<= end_dt + timedelta(minutes=5):
                     #append vol_dt
-                    dt_list.append(vol_dt + timedelta(seconds=150)) #add 2.5 minutes to the volume time to better capture the mid point time
+                    dt_list.append(vol_dt + timedelta(seconds=vol_time/2)) #add half volume time to better capture the mid point time
                     #append radar data
                     with zip_fd.open(zip_item) as radarfile:
                         radars.append(pyart.aux_io.read_odim_h5(radarfile))
 
+    return radars, dt_list
+
+def load_nhp_radar_data(data_path, vol_time):
+
+    #list files
+    radar_ffn_list = sorted(glob(data_path + '/*.h5'))
+    #load data
+    radars = []
+    dt_list = []
+    for radar_ffn in radar_ffn_list:
+        #load radar
+        radars.append(pyart.aux_io.read_odim_h5(radar_ffn))
+        #extract vol time
+        vol_dt = datetime.strptime(os.path.basename(radar_ffn)[0:13], '%Y%m%d%H_%M')
+        #append vol_dt
+        dt_list.append(vol_dt + timedelta(seconds=vol_time/2)) #add half volume time to better capture the mid point time
     return radars, dt_list
 
 
