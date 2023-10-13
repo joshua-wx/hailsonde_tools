@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 import zipfile
 import os
-import math
 from glob import glob
 
 import numpy as np
@@ -13,37 +12,6 @@ from metpy.units import units
 from metpy import calc
 
 import pyart
-
-def find_nearest_dt_idx(target_dt, dt_list):
-    time_diff = []
-    for tempdt in dt_list:
-        time_diff.append(abs((target_dt-tempdt).total_seconds()))
-    return np.argmin(time_diff)
-
-def find_nearest_idx(array, value):
-    array = np.asarray(array)
-    idx = (np.abs(array - value)).argmin()
-    return idx
-
-def degrees2meters(degrees, radius=6371000.0):
-    """
-    Convenience function to convert (great circle) degrees to meters
-    assuming a perfectly spherical Earth.
-
-    :type degrees: float
-    :param degrees: Distance in (great circle) degrees
-    :type radius: float, optional
-    :param radius: Radius of the Earth used for the calculation.
-    :rtype: float
-    :return: Distance in meters as a floating point number.
-
-    .. rubric:: Example
-
-    >>> from obspy.geodetics import degrees2kilometers
-    >>> degrees2kilometers(1)
-    111.19492664455873
-    """
-    return degrees * (2.0 * radius * math.pi / 360.0)
 
 def decode_oax(filename):
 
@@ -87,7 +55,7 @@ def decode_oax(filename):
             'wdir':wdir * units.degree, 'wspd':wspd * units.meter/units.second,
             'location':location, 'time':time, 'lat':lat, 'lon':lon}
 
-def decode_raw_flight_history(filename, location='', split=-1, remove_nan_rows=False):
+def decode_raw_flight_history(filename, location='', split=-1):
 
     df = pd.read_csv(filename, header=0, skipinitialspace=True)
     raw_dict = df.to_dict(orient='list')
@@ -100,44 +68,17 @@ def decode_raw_flight_history(filename, location='', split=-1, remove_nan_rows=F
     wdir = raw_dict['Heading (degrees)'] * units.degree
     wspd = raw_dict['Speed (m/s)'] * units.meter/units.second
     rise = raw_dict['Rise speed (m/s)'] * units.meter/units.second
-    utc_time = np.array(raw_dict["UTC time"])
+
     #convert wind to u,v
     wind_u, wind_v = calc.wind_components(wspd, wdir)
 
-    #get lat/lon
-    lat = np.array(raw_dict["Latitude"])
-    lon = np.array(raw_dict["Longitude"])
-
-
-
     #calculate seconds from launch
-    launch_dt = datetime.strptime(utc_time[0], '%H:%M:%S')
+    launch_dt = datetime.strptime(raw_dict["UTC time"][0], '%H:%M:%S')
     profile_seconds = np.zeros_like(wind_u)
-    for i, time_str in enumerate(utc_time):
+    for i, time_str in enumerate(raw_dict["UTC time"]):
         tmp_dt = datetime.strptime(time_str, '%H:%M:%S')
         profile_seconds[i] = (tmp_dt-launch_dt).total_seconds()
 
-    #remove nan rows (occuring in GPS data)
-    if remove_nan_rows:
-        #split time
-        split_time = profile_seconds[split]
-        #apply nan filter
-        nan_filter = ~np.isnan(lat)
-        pres = pres[nan_filter]
-        hght = hght[nan_filter]
-        tmpc = tmpc[nan_filter]
-        dwpc = dwpc[nan_filter]
-        wdir = wdir[nan_filter]
-        wspd = wspd[nan_filter]
-        rise = rise[nan_filter]
-        utc_time = utc_time[nan_filter]
-        wind_u = wind_u[nan_filter]
-        wind_v = wind_v[nan_filter]
-        lat = lat[nan_filter]
-        lon = lon[nan_filter]
-        profile_seconds = profile_seconds[nan_filter]
-        #adjust split
-        split = np.argmin(np.abs(split_time - profile_seconds))
 
     with_balloon_profile = {'pres':pres[:split+1], 'hght':hght[:split+1],
                             'tmpc':tmpc[:split+1], 'dwpc':dwpc[:split+1],
@@ -145,7 +86,7 @@ def decode_raw_flight_history(filename, location='', split=-1, remove_nan_rows=F
                             'rise':rise[:split+1],
                             'wind_u':wind_u[:split+1], 'wind_v':wind_v[:split+1],
                             'time':profile_seconds[:split+1],
-                            'lat':lat[:split+1], 'lon':lon[:split+1]}
+                            'lat':np.array(raw_dict["Latitude"][:split+1]), 'lon':np.array(raw_dict["Longitude"][:split+1])}
 
     no_balloon_profile = {'pres':pres[split:], 'hght':hght[split:],
                             'tmpc':tmpc[split:], 'dwpc':dwpc[split:],
@@ -153,9 +94,9 @@ def decode_raw_flight_history(filename, location='', split=-1, remove_nan_rows=F
                             'rise':rise[split:],
                             'wind_u':wind_u[split:], 'wind_v':wind_v[split:],
                             'time':profile_seconds[split:],
-                            'lat':lat[split:], 'lon':lon[split:]}
+                            'lat':np.array(raw_dict["Latitude"][split:]), 'lon':np.array(raw_dict["Longitude"][split:])}
 
-    return with_balloon_profile, no_balloon_profile, {'time':launch_dt, 'lat':lat[0], 'lon':lon[0]}
+    return with_balloon_profile, no_balloon_profile, {'time':launch_dt, 'lat':raw_dict["Latitude"][0], 'lon':raw_dict["Longitude"][0]}
 
 
 def get_accessg_profile(dt, request_lat, request_lon):
