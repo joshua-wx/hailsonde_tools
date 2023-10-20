@@ -246,7 +246,7 @@ def load_nhp_radar_data(data_path, vol_time):
     dt_list = []
     for radar_ffn in radar_ffn_list:
         #load radar
-        radars.append(pyart.aux_io.read_odim_h5(radar_ffn))
+        radars.append(pyart.aux_io.read_odim_h5(radar_ffn, file_field_names=True))
         #extract vol time
         vol_dt = datetime.strptime(os.path.basename(radar_ffn)[0:13], '%Y%m%d%H_%M')
         #append vol_dt
