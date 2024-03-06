@@ -87,6 +87,63 @@ def decode_oax(filename):
             'wdir':wdir * units.degree, 'wspd':wspd * units.meter/units.second,
             'location':location, 'time':time, 'lat':lat, 'lon':lon}
 
+def decode_raw_flight_history_nosplit(filename, location='', remove_nan_rows=False):
+
+    df = pd.read_csv(filename, header=0, skipinitialspace=True)
+    raw_dict = df.to_dict(orient='list')
+
+
+    pres = np.array(raw_dict['Pressure (Pascal)'])/100 * units.hectopascal
+    hght = raw_dict['Altitude (m MSL)'] * units.meter
+    tmpc = raw_dict['Temperature (C)'] * units.degC
+    dwpc = calc.dewpoint_from_relative_humidity(raw_dict['Temperature (C)'] * units.degC, raw_dict['Relative humidity (%)'] * units.percent)
+    wdir = raw_dict['Heading (degrees)'] * units.degree
+    wspd = raw_dict['Speed (m/s)'] * units.meter/units.second
+    rise = raw_dict['Rise speed (m/s)'] * units.meter/units.second
+    utc_time = np.array(raw_dict["UTC time"])
+    #convert wind to u,v
+    wind_u, wind_v = calc.wind_components(wspd, wdir)
+
+    #get lat/lon
+    lat = np.array(raw_dict["Latitude"])
+    lon = np.array(raw_dict["Longitude"])
+
+    #calculate seconds from launch
+    launch_dt = datetime.strptime(utc_time[0], '%H:%M:%S')
+    profile_seconds = np.zeros_like(wind_u)
+    for i, time_str in enumerate(utc_time):
+        tmp_dt = datetime.strptime(time_str, '%H:%M:%S')
+        profile_seconds[i] = (tmp_dt-launch_dt).total_seconds()
+
+    #remove nan rows (occuring in GPS data)
+    if remove_nan_rows:
+        nan_filter = ~np.isnan(lat)
+        pres = pres[nan_filter]
+        hght = hght[nan_filter]
+        tmpc = tmpc[nan_filter]
+        dwpc = dwpc[nan_filter]
+        wdir = wdir[nan_filter]
+        wspd = wspd[nan_filter]
+        rise = rise[nan_filter]
+        utc_time = utc_time[nan_filter]
+        wind_u = wind_u[nan_filter]
+        wind_v = wind_v[nan_filter]
+        lat = lat[nan_filter]
+        lon = lon[nan_filter]
+        profile_seconds = profile_seconds[nan_filter]
+
+    prof = {'pres':pres, 'hght':hght,
+                        'tmpc':tmpc, 'dwpc':dwpc,
+                        'wdir':wdir, 'wspd':wspd,
+                        'rise':rise,
+                        'wind_u':wind_u, 'wind_v':wind_v,
+                        'time':profile_seconds,
+                        'lat':lat, 'lon':lon}
+
+
+
+    return prof, {'time':launch_dt, 'lat':lat[0], 'lon':lon[0]}
+
 def decode_raw_flight_history(filename, location='', split=-1, remove_nan_rows=False):
 
     df = pd.read_csv(filename, header=0, skipinitialspace=True)
@@ -239,21 +296,53 @@ def load_level1_radar_data(radar_id, start_dt, end_dt, vol_time=300):
 
 def load_nhp_radar_data(data_path, vol_time):
 
+    """
+    Notes on Canadian radar volumes
+    - top down 6min volume
+    - file timestamp is the end time (closest to lowest elevation) rounded up to nearest minute
+    - the scan time in the files therefore starts from about -6m
+    """
+
     #list files
     radar_ffn_list = sorted(glob(data_path + '/*.h5'))
     #load data
     radars = []
-    dt_list = []
+    mid_point_dt_list = []
+    file_dt_list = []
     for radar_ffn in radar_ffn_list:
         #load radar
         radars.append(pyart.aux_io.read_odim_h5(radar_ffn, file_field_names=True))
         #extract vol time
         vol_dt = datetime.strptime(os.path.basename(radar_ffn)[0:13], '%Y%m%d%H_%M')
         #append vol_dt
-        dt_list.append(vol_dt - timedelta(seconds=vol_time/2)) #the filename is the volume end time. subtract half volume time to better capture the mid point time
-    return radars, dt_list
+        mid_point_dt_list.append(vol_dt - timedelta(seconds=vol_time/2)) #the filename is the volume end time. subtract half volume time to better capture the mid point time
+        file_dt_list.append(vol_dt)
+    return radars, file_dt_list, mid_point_dt_list
 
+def load_nhp_phido_radar_data(data_path, vol_time):
 
+    """
+    Notes on Canadian radar volumes
+    - top down 6min volume
+    - file timestamp is the end time (closest to lowest elevation) rounded up to nearest minute
+    - the scan time in the files therefore starts from about -6m
+    """
+
+    #list files
+    radar_ffn_list = sorted(glob(data_path + '/*.nc'))
+    #load data
+    radars = []
+    mid_point_dt_list = []
+    file_dt_list = []
+    for radar_ffn in radar_ffn_list:
+        #load radar
+        radars.append(pyart.io.read_cfradial(radar_ffn, file_field_names=True))
+        #extract vol time
+        vol_dt = datetime.strptime(os.path.basename(radar_ffn)[0:13], '%Y%m%d%H_%M')
+        #append vol_dt
+        mid_point_dt_list.append(vol_dt - timedelta(seconds=vol_time/2)) #the filename is the volume end time. subtract half volume time to better capture the mid point time
+        file_dt_list.append(vol_dt)
+    return radars, file_dt_list, mid_point_dt_list
 
 
 
