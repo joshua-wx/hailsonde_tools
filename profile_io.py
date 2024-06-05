@@ -109,10 +109,10 @@ def decode_raw_flight_history_nosplit(filename, location='', remove_nan_rows=Fal
     lon = np.array(raw_dict["Longitude"])
 
     #calculate seconds from launch
-    launch_dt = datetime.strptime(utc_time[0], '%H:%M:%S')
+    launch_dt = datetime.strptime(os.path.basename(filename)[:10] + '_' + utc_time[0], '%Y-%m-%d_%H:%M:%S')
     profile_seconds = np.zeros_like(wind_u)
     for i, time_str in enumerate(utc_time):
-        tmp_dt = datetime.strptime(time_str, '%H:%M:%S')
+        tmp_dt = datetime.strptime(os.path.basename(filename)[:10] + '_' + time_str, '%Y-%m-%d_%H:%M:%S')
         profile_seconds[i] = (tmp_dt-launch_dt).total_seconds()
 
     #remove nan rows (occuring in GPS data)
@@ -136,13 +136,14 @@ def decode_raw_flight_history_nosplit(filename, location='', remove_nan_rows=Fal
                         'tmpc':tmpc, 'dwpc':dwpc,
                         'wdir':wdir, 'wspd':wspd,
                         'rise':rise,
+                        'utc_time':utc_time,
                         'wind_u':wind_u, 'wind_v':wind_v,
                         'time':profile_seconds,
                         'lat':lat, 'lon':lon}
 
 
 
-    return prof, {'time':launch_dt, 'lat':lat[0], 'lon':lon[0]}
+    return prof, {'launch_time':launch_dt, 'lat':lat[0], 'lon':lon[0]}
 
 def decode_raw_flight_history(filename, location='', split=-1, remove_nan_rows=False):
 
